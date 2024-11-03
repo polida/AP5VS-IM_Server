@@ -1,15 +1,25 @@
 package utb.fai;
 
+import java.awt.*;
 import java.io.*;
 import java.net.*;
+import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.*;
+
 
 public class SocketHandler {
 	/** mySocket je socket, o který se bude tento SocketHandler starat */
 	Socket mySocket;
 
+
 	/** client ID je øetìzec ve formátu <IP_adresa>:<port> */
-	String clientID;
+	String clientID, username;
+
+	String group = "public";
+	List<String> groups = new ArrayList<>(Arrays.asList("public"));
+
 
 	/**
 	 * activeHandlers je reference na mnoinu vech právì bìících SocketHandlerù.
@@ -56,7 +66,6 @@ public class SocketHandler {
 				startSignal.await();
 				System.err.println("DBG>Output handler running for " + clientID);
 				writer = new OutputStreamWriter(mySocket.getOutputStream(), "UTF-8");
-				writer.write("\nYou are connected from " + clientID + "\n");
 				writer.flush();
 				while (!inputFinished) {
 					String m = messages.take();// blokující ètení - pokud není ve frontì zpráv nic, uspi se!
@@ -90,11 +99,41 @@ public class SocketHandler {
 				 */
 				activeHandlers.add(SocketHandler.this);
 				BufferedReader reader = new BufferedReader(new InputStreamReader(mySocket.getInputStream(), "UTF-8"));
+				username = reader.readLine();
 				while ((request = reader.readLine()) != null) { // pøila od mého klienta nìjaká zpráva?
 					// ano - poli ji vem ostatním klientùm
-					request = "From client " + clientID + ": " + request;
+					if (request.startsWith("#")) {
+						if (request.startsWith("#setMyName")) {
+							if (activeHandlers.userExists(request.substring(11))) {
+								continue;
+							}
+							username = request.substring(11);
+							System.out.println("DBG>Client " + clientID + " has set his name to " + username);
+							continue;
+						}
+						if (request.startsWith("#sendPrivate")) {
+							String[] parts = request.split(" ");
+							String recipient = parts[1];
+							request =  "[" + username + "] >> "+ String.join(" ", Arrays.copyOfRange(parts, 2, parts.length));
+							activeHandlers.sendPrivateMessage(SocketHandler.this, recipient, request);
+							continue;
+						}
+						if (request.startsWith("#join")) {
+							groups.add(request.substring(6));
+							continue;
+						}
+						if (request.startsWith("#leave")) {
+							groups.remove(request.substring(7));
+							continue;
+						}
+						if (request.startsWith("#groups")) {
+							activeHandlers.sendPrivateMessage(SocketHandler.this,username,String.join(", ", groups));
+							continue;
+						}
+					}
+					request = "[" + username + "] >> " + request;
 					System.out.println(request);
-					activeHandlers.sendMessageToAll(SocketHandler.this, request);
+					activeHandlers.sendGroupMessage(SocketHandler.this, groups, request);
 				}
 				inputFinished = true;
 				messages.offer("OutputHandler, wakeup and die!");

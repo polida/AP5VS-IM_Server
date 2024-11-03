@@ -7,7 +7,7 @@ import java.util.concurrent.*;
 public class App {
 
 	public static void main(String[] args) {
-		int port = 33000, max_conn = 2;
+		int port = 33000, max_conn = 3;
 
 		if (args.length > 0) {
 			if (args[0].startsWith("--help")) {
